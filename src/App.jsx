@@ -8,7 +8,6 @@ import {
   getDocs,
   runTransaction,
   query,
-  where,
   orderBy
 } from 'firebase/firestore';
 
@@ -132,32 +131,3 @@ export default function App() {
     </div>
   );
 }
-
-/*
-README (in project root)
-
-1) Instalación y configuración Firebase
-- Crea un proyecto en Firebase console -> Añade una app web
-- Copia el objeto de configuración y ponlo en variables de entorno del proyecto (REACT_APP_FIREBASE_...)
-- Crea una colección llamada 'slots' y añade documentos con campos:
-  - date (string, e.g. '2025-10-31')
-  - time (string, e.g. '10:00')
-  - available (boolean true/false)
-  - bookedBy (map, optional)
-
-2) Scripts
-- npm install
-- npm start (dev)
-- npm run build (producción)
-
-3) Deploy a Vercel
-- Subir repo a GitHub
-- Importar proyecto en Vercel (detecta Create React App)
-- Añadir variables de entorno en Vercel: REACT_APP_FIREBASE_API_KEY, REACT_APP_FIREBASE_AUTH_DOMAIN, REACT_APP_FIREBASE_PROJECT_ID, REACT_APP_FIREBASE_STORAGE_BUCKET, REACT_APP_FIREBASE_MESSAGING_SENDER_ID, REACT_APP_FIREBASE_APP_ID. (Vercel guarda variables por entorno: Production, Preview, Development).
-- Deploy y comparte el enlace público.
-
-Referencias importantes:
-- Firestore transactions: https://firebase.google.com/docs/firestore/manage-data/transactions
-- Add Firebase to web app: https://firebase.google.com/docs/web/setup
-- Vercel Environment Variables: https://vercel.com/docs/environment-variables
-*/
