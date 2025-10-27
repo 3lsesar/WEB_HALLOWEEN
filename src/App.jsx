@@ -12,7 +12,7 @@ import {
   orderBy
 } from 'firebase/firestore';
 
-// ----- TODO: replace these with your Firebase config in .env -----
+// ----- Firebase config desde env -----
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
@@ -22,8 +22,33 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Fecha fija
+const FIXED_DATE = '2025-10-31';
+
+// Datos de ejemplo (fallback) — solo para desarrollo/local
+const MOCK_SLOTS = [
+  { id: 'm-10-00', date: FIXED_DATE, time: '10:00', available: true, bookedBy: {} },
+  { id: 'm-10-30', date: FIXED_DATE, time: '10:30', available: true, bookedBy: {} },
+  { id: 'm-11-00', date: FIXED_DATE, time: '11:00', available: true, bookedBy: {} },
+  { id: 'm-11-30', date: FIXED_DATE, time: '11:30', available: true, bookedBy: {} },
+  { id: 'm-12-00', date: FIXED_DATE, time: '12:00', available: true, bookedBy: {} }
+];
+
+let db = null;
+let firebaseInitialized = false;
+
+if (firebaseConfig && firebaseConfig.apiKey) {
+  try {
+    const app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    firebaseInitialized = true;
+  } catch (e) {
+    console.error('Error inicializando Firebase:', e);
+    firebaseInitialized = false;
+  }
+} else {
+  firebaseInitialized = false;
+}
 
 function Slot({ slot, onReserve, reservingId, selected, onSelect }) {
   return (
@@ -61,29 +86,43 @@ export default function App() {
   const [reservingId, setReservingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-
-  // Fecha fija: 31 de octubre 2025
-  const FIXED_DATE = '2025-10-31';
+  const [useMock, setUseMock] = useState(!firebaseInitialized);
 
   useEffect(() => {
+    setMessage('');
     setLoading(true);
-    const q = query(
-      collection(db, 'slots'),
-      where('date', '==', FIXED_DATE),
-      orderBy('time')
-    );
 
-    getDocs(q).then(snap => {
-      const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // opcional: ordenar por time en caso de que los strings no estén ordenados correctamente
-      arr.sort((a, b) => a.time.localeCompare(b.time));
-      setSlots(arr);
-      setLoading(false);
-    }).catch(err => {
-      console.error(err);
-      setMessage('Error cargando slots');
-      setLoading(false);
-    });
+    if (!firebaseInitialized) {
+      // Si Firebase no está configurado o no inicializa, usamos los datos de ejemplo
+      setTimeout(() => {
+        setSlots(MOCK_SLOTS);
+        setLoading(false);
+        setMessage('Modo demo: Firebase no configurado. Rellena las variables de entorno para usar Firestore.');
+      }, 200); // pequeño delay para simular carga
+      return;
+    }
+
+    // Si Firebase está inicializado, intentamos leer la colección 'slots' filtrada por fecha fija
+    (async () => {
+      try {
+        const q = query(collection(db, 'slots'), where('date', '==', FIXED_DATE), orderBy('time'));
+        const snap = await getDocs(q);
+        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // ordenar por time por si acaso
+        arr.sort((a, b) => a.time.localeCompare(b.time));
+        setSlots(arr);
+        setUseMock(false);
+        setLoading(false);
+        if (arr.length === 0) setMessage('No hay franjas en Firestore para esa fecha. (Comprueba que existan documentos con date = 2025-10-31).');
+      } catch (err) {
+        console.error('Error leyendo Firestore:', err);
+        setMessage('Error leyendo Firestore. Revisa la consola y las reglas de seguridad.');
+        // fallback a mock
+        setSlots(MOCK_SLOTS);
+        setUseMock(true);
+        setLoading(false);
+      }
+    })();
   }, []);
 
   async function reserve(slot) {
@@ -94,6 +133,17 @@ export default function App() {
     setReservingId(slot.id);
     setMessage('Intentando reservar...');
 
+    if (!firebaseInitialized || useMock) {
+      // Simulamos la reserva localmente (solo demo)
+      setTimeout(() => {
+        setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, available: false, bookedBy: { name } } : s));
+        setMessage('Reserva simulada (modo demo). Configura Firebase para reservas reales.');
+        setReservingId(null);
+        setSelectedSlot(null);
+      }, 600);
+      return;
+    }
+
     const slotRef = doc(db, 'slots', slot.id);
     try {
       await runTransaction(db, async (transaction) => {
@@ -102,7 +152,6 @@ export default function App() {
         const data = sDoc.data();
         if (!data.available) throw new Error('Slot ya reservado');
 
-        // marca como reservado
         transaction.update(slotRef, {
           available: false,
           bookedBy: { name, email, note, at: new Date().toISOString() }
@@ -110,19 +159,15 @@ export default function App() {
       });
 
       setMessage('Reserva completada 🎉 — revisa el email (si has integrado envío)');
-
-      // actualizar UI localmente
       setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, available: false, bookedBy: { name } } : s));
-      // deseleccionar la franja reservada (opcional)
       setSelectedSlot(null);
     } catch (err) {
       console.error(err);
       setMessage(err.message || 'No se pudo reservar');
-      // si la franja fue reservada por otro, refrescamos la lista
+      // refrescar lista
       try {
         const snap = await getDocs(query(collection(db, 'slots'), where('date', '==', FIXED_DATE), orderBy('time')));
-        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setSlots(arr);
+        setSlots(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       } catch (e) { console.error('Error refrescando slots', e); }
     } finally {
       setReservingId(null);
@@ -170,6 +215,7 @@ export default function App() {
               Reservar franja seleccionada
             </button>
             <div style={{ marginTop: 8, minHeight: 20 }}>{message}</div>
+            {useMock && <div style={{ marginTop: 8, fontSize: 12, color:'#b44' }}>Nota: estás en modo demo (sin Firebase configurado).</div>}
           </div>
         </aside>
       </div>
