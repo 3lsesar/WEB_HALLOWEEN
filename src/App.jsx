@@ -27,7 +27,7 @@ function App() {
 
   // Horas de 17:00 a 20:00 (cada 15 min)
   const HOURS = [];
-  for (let h = 18; h < 21; h++) {
+  for (let h = 17; h < 21; h++) {
     for (let m = 0; m < 60; m += 15) {
       HOURS.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
     }
