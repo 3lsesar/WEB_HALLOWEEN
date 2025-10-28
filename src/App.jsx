@@ -66,13 +66,15 @@ function App() {
       return;
     }
 
-    // Validar slots consecutivos
+    // Calcular slots que ocupará esta reserva
     const startIndex = HOURS.indexOf(hour);
     const slotsToBlock = Math.ceil(duration / 15);
     const selectedSlots = HOURS.slice(startIndex, startIndex + slotsToBlock);
 
+    // Comprobar conflictos con reservas existentes
     const conflict = reservations.some(r => {
-      const rStartIndex = HOURS.indexOf(r.startTime.split("T")[1].slice(0,5));
+      const rHour = new Date(r.startTime).toISOString().slice(11,16); // "HH:MM"
+      const rStartIndex = HOURS.indexOf(rHour);
       const rSlots = Math.ceil(r.duration / 15);
       const rOccupied = HOURS.slice(rStartIndex, rStartIndex + rSlots);
       return rOccupied.some(s => selectedSlots.includes(s));
@@ -168,7 +170,8 @@ function App() {
           const selectedSlots = HOURS.slice(idx, idx + slotsToBlock);
 
           const slotTaken = reservations.some(r => {
-            const rStartIndex = HOURS.indexOf(r.startTime.split("T")[1].slice(0,5));
+            const rHour = new Date(r.startTime).toISOString().slice(11,16);
+            const rStartIndex = HOURS.indexOf(rHour);
             const rSlots = Math.ceil(r.duration / 15);
             const rOccupied = HOURS.slice(rStartIndex, rStartIndex + rSlots);
             return rOccupied.some(s => selectedSlots.includes(s));
