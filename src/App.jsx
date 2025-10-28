@@ -53,39 +53,37 @@ function App() {
 
   const handleConfirm = async () => {
     const duration = getDuration();
-    if (!name || !makeup || !hour || duration <= 0 || (makeup === "Otro" && !customType)) {
+    if (!name || !makeup || !hour || duration <= 0) {
       alert("Rellena todos los campos correctamente 🎃");
+      return;
+    }
+
+    const startTime = new Date(`2025-10-31T${hour}:00`);
+    const endTime = new Date(startTime.getTime() + duration * 60000);
+
+    // Evitar que la misma persona reserve el mismo tipo de maquillaje
+    const duplicate = reservations.some(r => r.name === name && r.makeupType === (makeup === "Otro" ? customType : makeup));
+    if (duplicate) {
+      alert("💀 Ya tienes una reserva para este tipo de maquillaje.");
+      return;
+    }
+
+    // Comprobar conflictos con otros slots
+    const conflict = reservations.some((r) => {
+      const rStart = new Date(r.startTime).getTime();
+      const rEnd = rStart + r.duration * 60000;
+      const sStart = startTime.getTime();
+      const sEnd = endTime.getTime();
+      return (sStart < rEnd && sEnd > rStart); // solapamiento
+    });
+
+    if (conflict) {
+      alert("💀 Esa hora ya está ocupada. Elige otra.");
       return;
     }
 
     const makeupType = makeup === "Otro" ? customType : makeup;
 
-    // Validar que la persona no tenga el mismo tipo de maquillaje ya reservado
-    if (reservations.some(r => r.name === name && r.makeupType === makeupType)) {
-      alert("Ya tienes una reserva para este tipo de maquillaje 💀");
-      return;
-    }
-
-    // Calcular slots que ocupará esta reserva
-    const startIndex = HOURS.indexOf(hour);
-    const slotsToBlock = Math.ceil(duration / 15);
-    const selectedSlots = HOURS.slice(startIndex, startIndex + slotsToBlock);
-
-    // Comprobar conflictos con reservas existentes
-    const conflict = reservations.some(r => {
-      const rHour = new Date(r.startTime).toISOString().slice(11,16); // "HH:MM"
-      const rStartIndex = HOURS.indexOf(rHour);
-      const rSlots = Math.ceil(r.duration / 15);
-      const rOccupied = HOURS.slice(rStartIndex, rStartIndex + rSlots);
-      return rOccupied.some(s => selectedSlots.includes(s));
-    });
-
-    if (conflict) {
-      alert("💀 Este horario se solapa con otra reserva. Elige otra.");
-      return;
-    }
-
-    const startTime = new Date(`2025-10-31T${hour}:00`);
     const newRes = {
       name,
       makeupType,
@@ -142,6 +140,7 @@ function App() {
         ))}
       </select>
 
+      {/* Campos personalizados */}
       {makeup === "Otro" && (
         <div style={styles.customInputs}>
           <input
@@ -164,19 +163,15 @@ function App() {
       {/* Selector de hora */}
       <h3 style={{ color: "#ffa500", marginTop: "20px" }}>Selecciona hora disponible</h3>
       <div style={styles.grid}>
-        {HOURS.map((h, idx) => {
+        {HOURS.map((h) => {
+          const thisTime = new Date(`2025-10-31T${h}:00`).getTime();
           const duration = getDuration();
-          const slotsToBlock = Math.ceil(duration / 15);
-          const selectedSlots = HOURS.slice(idx, idx + slotsToBlock);
-
-          const slotTaken = reservations.some(r => {
-            const rHour = new Date(r.startTime).toISOString().slice(11,16);
-            const rStartIndex = HOURS.indexOf(rHour);
-            const rSlots = Math.ceil(r.duration / 15);
-            const rOccupied = HOURS.slice(rStartIndex, rStartIndex + rSlots);
-            return rOccupied.some(s => selectedSlots.includes(s));
+          const slotTaken = reservations.some((r) => {
+            const rStart = new Date(r.startTime).getTime();
+            const rEnd = rStart + r.duration * 60000;
+            const sEnd = thisTime + duration * 60000;
+            return (thisTime < rEnd && sEnd > rStart); // solapamiento
           });
-
           return (
             <button
               key={h}
@@ -199,6 +194,7 @@ function App() {
         })}
       </div>
 
+      {/* Confirmar */}
       {!confirming ? (
         <button
           style={styles.confirmBtn}
@@ -215,6 +211,7 @@ function App() {
         </div>
       )}
 
+      {/* Reservas existentes */}
       <div style={{ marginTop: "40px" }}>
         <h2 style={{ color: "#ffa500" }}>👻 Reservas confirmadas</h2>
         <ul style={styles.resList}>
@@ -223,7 +220,10 @@ function App() {
             .map((r, i) => (
               <li key={i} style={styles.resItem}>
                 {r.name} — {r.makeupType} (
-                {new Date(r.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {new Date(r.startTime).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
                 )
               </li>
             ))}
@@ -235,19 +235,107 @@ function App() {
 
 /* 🎨 Estilos */
 const styles = {
-  container: { minHeight: "100vh", backgroundColor: "#0a0a0a", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", padding: "2rem", fontFamily: "'Creepster', cursive" },
-  title: { fontSize: "2.5rem", color: "#ffa500", textShadow: "0 0 20px #ff5500" },
-  select: { marginTop: "10px", padding: "10px", borderRadius: "8px", border: "2px solid #ffa500", backgroundColor: "#111", color: "#ffa500", fontSize: "1rem", width: "250px", textAlign: "center" },
-  customInputs: { marginTop: "10px", display: "flex", gap: "10px", justifyContent: "center" },
-  input: { padding: "8px", borderRadius: "8px", border: "2px solid #ffa500", backgroundColor: "#111", color: "#ffa500", width: "140px" },
-  grid: { marginTop: "15px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: "8px", width: "90%", maxWidth: "400px" },
-  slot: { padding: "10px", border: "2px solid #ffa500", borderRadius: "10px", fontSize: "0.9rem", transition: "0.3s" },
-  confirmBtn: { marginTop: "20px", backgroundColor: "#ffa500", color: "#000", border: "none", borderRadius: "10px", padding: "10px 20px", fontSize: "1rem", cursor: "pointer", transition: "0.2s" },
-  yesBtn: { backgroundColor: "#ffa500", color: "#000", border: "none", borderRadius: "10px", padding: "10px 20px", marginRight: "10px", cursor: "pointer" },
-  noBtn: { backgroundColor: "#333", color: "#ffa500", border: "1px solid #ffa500", borderRadius: "10px", padding: "10px 20px", cursor: "pointer" },
-  resList: { listStyle: "none", padding: 0 },
-  resItem: { backgroundColor: "rgba(255, 165, 0, 0.1)", border: "1px solid #ffa500", borderRadius: "8px", margin: "5px 0", padding: "8px" },
-  loading: { minHeight: "100vh", backgroundColor: "#000", display: "flex", justifyContent: "center", alignItems: "center" },
+  container: {
+    minHeight: "100vh",
+    backgroundColor: "#0a0a0a",
+    color: "#fff",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: "2rem",
+    fontFamily: "'Creepster', cursive",
+  },
+  title: {
+    fontSize: "2.5rem",
+    color: "#ffa500",
+    textShadow: "0 0 20px #ff5500",
+  },
+  select: {
+    marginTop: "10px",
+    padding: "10px",
+    borderRadius: "8px",
+    border: "2px solid #ffa500",
+    backgroundColor: "#111",
+    color: "#ffa500",
+    fontSize: "1rem",
+    width: "250px",
+    textAlign: "center",
+  },
+  customInputs: {
+    marginTop: "10px",
+    display: "flex",
+    gap: "10px",
+    justifyContent: "center",
+  },
+  input: {
+    padding: "8px",
+    borderRadius: "8px",
+    border: "2px solid #ffa500",
+    backgroundColor: "#111",
+    color: "#ffa500",
+    width: "140px",
+  },
+  grid: {
+    marginTop: "15px",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
+    gap: "8px",
+    width: "90%",
+    maxWidth: "400px",
+  },
+  slot: {
+    padding: "10px",
+    border: "2px solid #ffa500",
+    borderRadius: "10px",
+    fontSize: "0.9rem",
+    transition: "0.3s",
+  },
+  confirmBtn: {
+    marginTop: "20px",
+    backgroundColor: "#ffa500",
+    color: "#000",
+    border: "none",
+    borderRadius: "10px",
+    padding: "10px 20px",
+    fontSize: "1rem",
+    cursor: "pointer",
+    transition: "0.2s",
+  },
+  yesBtn: {
+    backgroundColor: "#ffa500",
+    color: "#000",
+    border: "none",
+    borderRadius: "10px",
+    padding: "10px 20px",
+    marginRight: "10px",
+    cursor: "pointer",
+  },
+  noBtn: {
+    backgroundColor: "#333",
+    color: "#ffa500",
+    border: "1px solid #ffa500",
+    borderRadius: "10px",
+    padding: "10px 20px",
+    cursor: "pointer",
+  },
+  resList: {
+    listStyle: "none",
+    padding: 0,
+  },
+  resItem: {
+    backgroundColor: "rgba(255, 165, 0, 0.1)",
+    border: "1px solid #ffa500",
+    borderRadius: "8px",
+    margin: "5px 0",
+    padding: "8px",
+  },
+  loading: {
+    minHeight: "100vh",
+    backgroundColor: "#000",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+  },
 };
 
 export default App;
