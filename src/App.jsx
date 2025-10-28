@@ -27,12 +27,13 @@ function App() {
 
   // Horas de 17:00 a 20:00 (cada 15 min)
   const HOURS = [];
-  for (let h = 17; h < 21; h++) {
+  for (let h = 17; h < 20; h++) {
     for (let m = 0; m < 60; m += 15) {
       HOURS.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
     }
   }
 
+  // Cargar reservas existentes
   const loadReservations = async () => {
     const q = query(collection(db, "reservations"), orderBy("startTime"));
     const querySnapshot = await getDocs(q);
@@ -58,31 +59,28 @@ function App() {
       return;
     }
 
-    const startTime = new Date(`2025-10-31T${hour}:00`);
-    const endTime = new Date(startTime.getTime() + duration * 60000);
-
-    // Evitar que la misma persona reserve el mismo tipo de maquillaje
-    const duplicate = reservations.some(r => r.name === name && r.makeupType === (makeup === "Otro" ? customType : makeup));
+    // Comprobar si la misma persona ya tiene este tipo de maquillaje
+    const makeupType = makeup === "Otro" ? customType : makeup;
+    const duplicate = reservations.some(r => r.name === name && r.makeupType === makeupType);
     if (duplicate) {
       alert("💀 Ya tienes una reserva para este tipo de maquillaje.");
       return;
     }
 
-    // Comprobar conflictos con otros slots
+    const startTime = new Date(`2025-10-31T${hour}:00`);
+    const endTime = new Date(startTime.getTime() + duration * 60000);
+
+    // Comprobar conflictos con otras reservas
     const conflict = reservations.some((r) => {
-      const rStart = new Date(r.startTime).getTime();
-      const rEnd = rStart + r.duration * 60000;
-      const sStart = startTime.getTime();
-      const sEnd = endTime.getTime();
-      return (sStart < rEnd && sEnd > rStart); // solapamiento
+      const rStart = new Date(r.startTime);
+      const rEnd = new Date(rStart.getTime() + r.duration * 60000);
+      return (startTime < rEnd && endTime > rStart);
     });
 
     if (conflict) {
       alert("💀 Esa hora ya está ocupada. Elige otra.");
       return;
     }
-
-    const makeupType = makeup === "Otro" ? customType : makeup;
 
     const newRes = {
       name,
@@ -164,14 +162,16 @@ function App() {
       <h3 style={{ color: "#ffa500", marginTop: "20px" }}>Selecciona hora disponible</h3>
       <div style={styles.grid}>
         {HOURS.map((h) => {
+          const durationForCheck = getDuration() || 15; // 15 min por defecto si no se selecciona
           const thisTime = new Date(`2025-10-31T${h}:00`).getTime();
-          const duration = getDuration();
+
           const slotTaken = reservations.some((r) => {
             const rStart = new Date(r.startTime).getTime();
             const rEnd = rStart + r.duration * 60000;
-            const sEnd = thisTime + duration * 60000;
-            return (thisTime < rEnd && sEnd > rStart); // solapamiento
+            const sEnd = thisTime + durationForCheck * 60000;
+            return thisTime < rEnd && sEnd > rStart; // solapamiento
           });
+
           return (
             <button
               key={h}
